@@ -1,0 +1,21 @@
+# Maintainer: openOODA-tools <ops@openooda.org>
+pkgname=oogrepz-bin
+_pkgname=oogrepz
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Zero-copy streaming search across gzip, xz, and zstd compressed archives."
+arch=('x86_64')
+url="https://github.com/openOODA-tools/oogrepz"
+license=('Apache-2.0')
+depends=('glibc')
+provides=('oogrepz')
+conflicts=('oogrepz')
+source_x86_64=("${url}/releases/download/v${pkgver}/oogrepz-linux-x86_64"
+               "uninstall.sh::https://raw.githubusercontent.com/openOODA-tools/${_pkgname}/v${pkgver}/uninstall.sh")
+sha256sums_x86_64=('SKIP'
+                   'SKIP')
+
+package() {
+    install -Dm755 "${srcdir}/oogrepz-linux-x86_64" "${pkgdir}/usr/bin/oogrepz"
+    install -Dm755 uninstall.sh "${pkgdir}/usr/bin/oogrepz-uninstall"
+}
