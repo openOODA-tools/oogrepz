@@ -1,0 +1,134 @@
+// # Command-Line Options Parser
+//
+// Logline: Decodes CLI flags, pattern strings, file arguments, and display modes for oogrepz.
+//
+// Setup: Pure argument tokenizer supporting POSIX grep switches, JSON telemetry, and MCP modes.
+//
+// Beats:
+//   1. Declare structured CliOptions configuration type.
+//   2. Parse help, version, line numbering, case-insensitivity, and inversion flags.
+//   3. Parse count-only, files-with-matches, and filename prefix controls.
+//   4. Separate search pattern from target compressed file path arguments.
+
+import "core/archive_types.oo";
+
+pub type CliOptions = struct {
+    show_help: Bool,
+    show_version: Bool,
+    show_mcp: Bool,
+    show_demo: Bool,
+    json_output: Bool,
+    run_test: Bool,
+    search_opts: SearchOptions,
+    files: List[String]
+};
+
+pub fn render_cli_help() -> String {
+    return "oogrepz 0.2.0 (openOODA sovereign compressed stream search)\n"
+        + "usage: oogrepz [options] <pattern> [<file>...]\n\n"
+        + "Zero-copy streaming search across gzip, bzip2, xz, and zstd compressed archives.\n\n"
+        + "Options:\n"
+        + "  -h, --help                 display this help and exit\n"
+        + "  -v, --version              output version information and exit\n"
+        + "  -i, --ignore-case          ignore case distinctions in patterns and data\n"
+        + "  -n, --line-number          prefix each line of output with its line number\n"
+        + "      --invert-match         select non-matching lines\n"
+        + "  -c, --count                print only a count of selected lines per file\n"
+        + "  -l, --files-with-matches   print only names of files with matching lines\n"
+        + "  -H, --with-filename        print file name with output lines\n"
+        + "      --no-filename          suppress the file name prefix on output\n"
+        + "  -j, --json                 output structured JSON metrics\n"
+        + "  -D, --demo                 interactive compressed archive search showcase\n"
+        + "      --no-color             suppress ANSI color highlight codes\n"
+        + "      --test                 execute internal multi-tier verification suite\n"
+        + "      --mcp                  run as Model Context Protocol stdio server\n";
+}
+
+pub fn render_cli_version() -> String {
+    return "oogrepz 0.2.0 (openOODA sovereign userland)\n";
+}
+
+pub fn parse_cli_options(args: List[String]) -> CliOptions {
+    let mut help_flag: Bool = false;
+    let mut ver_flag: Bool = false;
+    let mut mcp_flag: Bool = false;
+    let mut demo_flag: Bool = false;
+    let mut json_flag: Bool = false;
+    let mut test_flag: Bool = false;
+
+    let mut ignore_case: Bool = false;
+    let mut line_number: Bool = false;
+    let mut invert_match: Bool = false;
+    let mut count_only: Bool = false;
+    let mut files_only: Bool = false;
+    let mut with_filename: Bool = false;
+    let mut use_color: Bool = true;
+
+    let mut pat_str: String = "";
+    let mut file_list: List[String] = list_new();
+
+    let n: Int = list_len(args);
+    let mut i: Int = 0;
+
+    while i < n {
+        let arg: String = list_get(args, i);
+        if arg == "-h" || arg == "--help" {
+            help_flag = true;
+        } else if arg == "-v" || arg == "--version" {
+            ver_flag = true;
+        } else if arg == "--mcp" {
+            mcp_flag = true;
+        } else if arg == "-D" || arg == "--demo" {
+            demo_flag = true;
+        } else if arg == "-j" || arg == "--json" {
+            json_flag = true;
+        } else if arg == "--test" {
+            test_flag = true;
+        } else if arg == "-i" || arg == "--ignore-case" {
+            ignore_case = true;
+        } else if arg == "-n" || arg == "--line-number" {
+            line_number = true;
+        } else if arg == "--invert-match" {
+            invert_match = true;
+        } else if arg == "-c" || arg == "--count" {
+            count_only = true;
+        } else if arg == "-l" || arg == "--files-with-matches" {
+            files_only = true;
+        } else if arg == "-H" || arg == "--with-filename" {
+            with_filename = true;
+        } else if arg == "--no-filename" {
+            with_filename = false;
+        } else if arg == "--no-color" {
+            use_color = false;
+        } else if !str_starts_with(arg, "-") {
+            if chars_len(pat_str) == 0 {
+                pat_str = arg;
+            } else {
+                file_list = list_push(file_list, arg);
+            }
+        }
+        i = i + 1;
+    }
+
+    let s_opts: SearchOptions = SearchOptions {
+        pattern: pat_str,
+        ignore_case: ignore_case,
+        invert_match: invert_match,
+        line_number: line_number,
+        count_only: count_only,
+        files_only: files_only,
+        with_filename: with_filename,
+        use_color: use_color
+    };
+
+    return CliOptions {
+        show_help: help_flag,
+        show_version: ver_flag,
+        show_mcp: mcp_flag,
+        show_demo: demo_flag,
+        json_output: json_flag,
+        run_test: test_flag,
+        search_opts: s_opts,
+        files: file_list
+    };
+}

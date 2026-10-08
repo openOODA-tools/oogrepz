@@ -1,0 +1,81 @@
+// # Compressed Stream Pattern Matcher
+//
+// Logline: Evaluates substring patterns against stream lines with case and invert-match controls.
+//
+// Setup: Pure algorithmic text searching engine operating over parsed archive lines.
+//
+// Beats:
+//   1. Convert character sequences to lowercase for case-insensitive matching.
+//   2. Determine substring containment with negative-trust boundary checks.
+//   3. Filter lines based on pattern presence or inverted exclusion criteria.
+//   4. Package matches into structured FileSearchResult with 1-indexed line coordinates.
+
+import "archive_types.oo";
+
+pub fn to_lower_str(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b >= 65 && b <= 90 { // 'A'..'Z'
+            let lower_b: Int = b + 32;
+            out = out + bytes_to_str(bytes_push(bytes_new(), lower_b));
+        } else {
+            out = out + char_at(s, i);
+        }
+        i = i + 1;
+    }
+
+    return out;
+}
+
+pub fn contains_substring(haystack: String, needle: String, ignore_case: Bool) -> Bool {
+    let n_len: Int = chars_len(needle);
+    let h_len: Int = chars_len(haystack);
+
+    if n_len == 0 {
+        return true;
+    }
+    if n_len > h_len {
+        return false;
+    }
+
+    let h_cmp: String = if ignore_case { to_lower_str(haystack) } else { haystack };
+    let n_cmp: String = if ignore_case { to_lower_str(needle) } else { needle };
+
+    let mut i: Int = 0;
+    while i + n_len <= h_len {
+        if str_slice(h_cmp, i, i + n_len) == n_cmp {
+            return true;
+        }
+        i = i + 1;
+    }
+
+    return false;
+}
+
+pub fn search_stream_lines(
+    path: String,
+    fmt_name: String,
+    lines: List[String],
+    opts: SearchOptions
+) -> FileSearchResult {
+    let mut matches: List[MatchLine] = list_new();
+    let total: Int = list_len(lines);
+    let mut i: Int = 0;
+
+    while i < total {
+        let line: String = list_get(lines, i);
+        let matched: Bool = contains_substring(line, opts.pattern, opts.ignore_case);
+        let selected: Bool = if opts.invert_match { !matched } else { matched };
+
+        if selected {
+            matches = list_push(matches, make_match_line(path, i + 1, line, fmt_name));
+        }
+        i = i + 1;
+    }
+
+    return make_file_search_result(path, fmt_name, total, matches);
+}

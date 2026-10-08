@@ -1,0 +1,180 @@
+// # Model Context Protocol Stdio Server
+//
+// Logline: Streaming JSON-RPC 2.0 protocol handler providing 5 sovereign compressed search tools.
+//
+// Setup: Demands &FsReadCap for processing streaming stdio RPC frames with negative-trust parsing.
+//
+// Beats:
+//   1. Handle JSON-RPC lifecycle methods (initialize, ping, tools/list, shutdown).
+//   2. Dispatch tool calls: grepz_search, grepz_count, grepz_detect, grepz_files, grepz_demo.
+//   3. Extract request parameters with RFC 8259 unescaping.
+//   4. Format conformant JSON-RPC responses and send to standard output.
+
+import "core/archive_types.oo";
+import "core/format_detector.oo";
+import "core/stream_reader.oo";
+import "core/pattern_matcher.oo";
+import "render/render_json.oo";
+import "render/render_demo.oo";
+import "json_field.oo";
+
+fn mcp_success(id: String, result_json: String) -> String {
+    let id_field: String = if chars_len(id) == 0 { "null" } else { id };
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_field + ",\"result\":" + result_json + "}\n";
+}
+
+fn mcp_error(id: String, code: Int, msg: String) -> String {
+    let id_field: String = if chars_len(id) == 0 { "null" } else { id };
+    return "{\"jsonrpc\":\"2.0\",\"id\":" + id_field + ",\"error\":{\"code\":" + code.to_string() + ",\"message\":\"" + json_str_escape(msg) + "\"}}\n";
+}
+
+fn handle_tools_list(id: String) -> String {
+    let list_json: String = "{\"tools\":["
+        + "{\"name\":\"grepz_search\",\"description\":\"Search lines matching pattern in compressed archive or text stream.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\",\"description\":\"Search pattern.\"},\"content\":{\"type\":\"string\",\"description\":\"Raw or uncompressed content stream to search.\"},\"file\":{\"type\":\"string\",\"description\":\"File path.\"},\"ignore_case\":{\"type\":\"boolean\",\"description\":\"Ignore case distinctions.\"}},\"required\":[\"pattern\"]}},"
+        + "{\"name\":\"grepz_count\",\"description\":\"Count matching occurrences across compressed archive or content stream.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\",\"description\":\"Search pattern.\"},\"content\":{\"type\":\"string\",\"description\":\"Content stream to search.\"},\"ignore_case\":{\"type\":\"boolean\",\"description\":\"Ignore case distinctions.\"}},\"required\":[\"pattern\"]}},"
+        + "{\"name\":\"grepz_detect\",\"description\":\"Identify archive compression format from filename or magic bytes.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"path\":{\"type\":\"string\",\"description\":\"File path or archive name.\"},\"header\":{\"type\":\"string\",\"description\":\"Optional initial header bytes.\"}},\"required\":[\"path\"]}},"
+        + "{\"name\":\"grepz_files\",\"description\":\"Return files containing matches for given pattern.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"pattern\":{\"type\":\"string\",\"description\":\"Search pattern.\"},\"content\":{\"type\":\"string\",\"description\":\"Content stream to search.\"},\"path\":{\"type\":\"string\",\"description\":\"File path.\"}},\"required\":[\"pattern\"]}},"
+        + "{\"name\":\"grepz_demo\",\"description\":\"Run simulated multi-archive compressed search showcase.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{}}}"
+        + "]}";
+    return mcp_success(id, list_json);
+}
+
+pub fn handle_mcp_message(raw: String, fs: &FsReadCap) -> String {
+    let method: String = json_extract_str_field(raw, "method");
+    let id_str: String = json_extract_str_field(raw, "id");
+    let id_val: String = if chars_len(id_str) > 0 { "\"" + id_str + "\"" } else { json_extract_int_field(raw, "id", 1).to_string() };
+
+    if method == "initialize" {
+        let init_result: String = "{\"protocolVersion\":\"2024-11-05\",\"capabilities\":{\"tools\":{}},\"serverInfo\":{\"name\":\"oogrepz\",\"version\":\"0.2.0\"}}";
+        return mcp_success(id_val, init_result);
+    }
+    if method == "ping" {
+        return mcp_success(id_val, "{}");
+    }
+    if method == "tools/list" {
+        return handle_tools_list(id_val);
+    }
+    if method == "tools/call" {
+        let tool_name: String = json_extract_str_field(raw, "name");
+
+        if tool_name == "grepz_search" {
+            let pat: String = json_extract_str_field(raw, "pattern");
+            let file_path: String = json_extract_str_field(raw, "file");
+            let content: String = json_extract_str_field(raw, "content");
+            let icase: Bool = json_extract_bool_field(raw, "ignore_case", false);
+
+            let mut stream_data: String = content;
+            if chars_len(stream_data) == 0 && chars_len(file_path) > 0 {
+                let r: Result[String, String] = read_archive_stream(fs, file_path);
+                stream_data = match r { Ok(s) => s, Err(_) => "" };
+            }
+
+            let fmt: ArchiveFormat = detect_format_from_path(file_path);
+            let lines: List[String] = split_into_lines(stream_data);
+            let mut opts: SearchOptions = default_search_options(pat);
+            opts.ignore_case = icase;
+            opts.line_number = true;
+
+            let res: FileSearchResult = search_stream_lines(file_path, fmt.name, lines, opts);
+            let json_body: String = file_result_to_json(res);
+            return mcp_success(id_val, "{\"content\":[{\"type\":\"text\",\"text\":\"" + json_str_escape(json_body) + "\"}]}");
+        }
+
+        if tool_name == "grepz_count" {
+            let pat: String = json_extract_str_field(raw, "pattern");
+            let content: String = json_extract_str_field(raw, "content");
+            let icase: Bool = json_extract_bool_field(raw, "ignore_case", false);
+
+            let lines: List[String] = split_into_lines(content);
+            let mut opts: SearchOptions = default_search_options(pat);
+            opts.ignore_case = icase;
+            opts.count_only = true;
+
+            let res: FileSearchResult = search_stream_lines("stdin", "stream", lines, opts);
+            let json_body: String = "{\"query\":\"" + json_str_escape(pat) + "\",\"count\":" + res.match_count.to_string() + "}";
+            return mcp_success(id_val, "{\"content\":[{\"type\":\"text\",\"text\":\"" + json_str_escape(json_body) + "\"}]}");
+        }
+
+        if tool_name == "grepz_detect" {
+            let path: String = json_extract_str_field(raw, "path");
+            let hdr: String = json_extract_str_field(raw, "header");
+            let fmt: ArchiveFormat = detect_archive_format(path, hdr);
+            let json_body: String = format_to_json(fmt, path);
+            return mcp_success(id_val, "{\"content\":[{\"type\":\"text\",\"text\":\"" + json_str_escape(json_body) + "\"}]}");
+        }
+
+        if tool_name == "grepz_files" {
+            let pat: String = json_extract_str_field(raw, "pattern");
+            let path: String = json_extract_str_field(raw, "path");
+            let content: String = json_extract_str_field(raw, "content");
+
+            let lines: List[String] = split_into_lines(content);
+            let opts: SearchOptions = default_search_options(pat);
+            let res: FileSearchResult = search_stream_lines(path, "stream", lines, opts);
+
+            let matched: Bool = res.match_count > 0;
+            let json_body: String = "{\"file\":\"" + json_str_escape(path) + "\",\"matches\":" + (if matched { "true" } else { "false" }) + ",\"count\":" + res.match_count.to_string() + "}";
+            return mcp_success(id_val, "{\"content\":[{\"type\":\"text\",\"text\":\"" + json_str_escape(json_body) + "\"}]}");
+        }
+
+        if tool_name == "grepz_demo" {
+            let showcase: String = render_grepz_demo(false);
+            return mcp_success(id_val, "{\"content\":[{\"type\":\"text\",\"text\":\"" + json_str_escape(showcase) + "\"}]}");
+        }
+
+        return mcp_error(id_val, -32601, "Unknown tool: " + tool_name);
+    }
+    if method == "shutdown" {
+        return mcp_success(id_val, "{}");
+    }
+    if method == "exit" {
+        return "";
+    }
+
+    return mcp_error(id_val, -32601, "Method not found: " + method);
+}
+
+fn find_newline_pos(s: String) -> Int {
+    let n: Int = chars_len(s);
+    let mut i: Int = 0;
+    while i < n {
+        if byte_at(s, i) == 10 {
+            return i;
+        }
+        i = i + 1;
+    }
+    return -1;
+}
+
+pub fn run_mcp_server(fs: &FsReadCap) -> Int {
+    let mut buf: String = "";
+    let mut running: Bool = true;
+
+    while running {
+        let r: Result[String, String] = oo_read_stdin_chunk(fs, 4096);
+        if !r.is_ok() {
+            running = false;
+        } else {
+            let chunk: String = match r { Ok(s) => s, Err(_) => "" };
+            if chars_len(chunk) == 0 {
+                running = false;
+            } else {
+                buf = buf + chunk;
+                let mut nl_pos: Int = find_newline_pos(buf);
+                while nl_pos >= 0 {
+                    let line: String = str_slice(buf, 0, nl_pos);
+                    buf = str_slice(buf, nl_pos + 1, chars_len(buf));
+                    let trimmed: String = str_trim(line);
+                    if chars_len(trimmed) > 0 {
+                        let resp: String = handle_mcp_message(trimmed, fs);
+                        if chars_len(resp) > 0 {
+                            print(resp);
+                        }
+                    }
+                    nl_pos = find_newline_pos(buf);
+                }
+            }
+        }
+    }
+    return 0;
+}

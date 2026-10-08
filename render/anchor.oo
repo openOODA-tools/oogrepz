@@ -1,0 +1,36 @@
+// # Render Subsystem Anchor
+//
+// Logline: Consolidates and verifies terminal match formatters, JSON serializers, and showcase demo.
+//
+// Setup: Pure anchor module validating visual output and telemetry encoding.
+//
+// Beats:
+//   1. Re-export terminal line highlighter and match formatters.
+//   2. Re-export structured JSON telemetry serializers.
+//   3. Re-export interactive multi-format compressed search demo.
+//   4. Validate rendering invariants and string outputs through self-check.
+
+import "core/archive_types.oo";
+import "render_matches.oo";
+import "render_json.oo";
+import "render_demo.oo";
+
+pub fn verify_render_subsystem() -> Bool {
+    let hl: String = highlight_match("test line", "line", false);
+    if hl != "test line" {
+        return false;
+    }
+
+    let m: MatchLine = make_match_line("sample.gz", 10, "matched text", "gzip");
+    let j: String = match_line_to_json(m);
+    if chars_len(j) == 0 {
+        return false;
+    }
+
+    let demo: String = render_grepz_demo(false);
+    if chars_len(demo) == 0 {
+        return false;
+    }
+
+    return true;
+}

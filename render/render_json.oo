@@ -1,0 +1,87 @@
+// # JSON Formatters and Telemetry Serializer
+//
+// Logline: Formats match lines, file search results, and detected archive formats into RFC 8259 JSON.
+//
+// Setup: Pure JSON string generation without external dependencies.
+//
+// Beats:
+//   1. Serialize single MatchLine record with file path, line number, content, and format.
+//   2. Serialize FileSearchResult with match counts and line collections.
+//   3. Serialize aggregate search summaries across multi-archive search sessions.
+//   4. Serialize ArchiveFormat identification metrics for inspection APIs.
+
+import "core/archive_types.oo";
+
+fn json_str_escape_basic(s: String) -> String {
+    let n: Int = chars_len(s);
+    let mut out: String = "";
+    let mut i: Int = 0;
+    while i < n {
+        let b: Int = byte_at(s, i);
+        if b == 34 { out = out + "\\\""; }
+        else if b == 92 { out = out + "\\\\"; }
+        else if b == 10 { out = out + "\\n"; }
+        else if b == 9 { out = out + "\\t"; }
+        else if b == 13 { out = out + "\\r"; }
+        else { out = out + char_at(s, i); }
+        i = i + 1;
+    }
+    return out;
+}
+
+pub fn match_line_to_json(m: MatchLine) -> String {
+    return "{\"file\":\"" + json_str_escape_basic(m.file_path) + "\""
+        + ",\"line\":" + m.line_num.to_string()
+        + ",\"content\":\"" + json_str_escape_basic(m.content) + "\""
+        + ",\"format\":\"" + json_str_escape_basic(m.format_name) + "\"}";
+}
+
+pub fn file_result_to_json(res: FileSearchResult) -> String {
+    let mut out: String = "{\"file\":\"" + json_str_escape_basic(res.file_path) + "\""
+        + ",\"format\":\"" + json_str_escape_basic(res.format_name) + "\""
+        + ",\"total_lines\":" + res.total_lines.to_string()
+        + ",\"match_count\":" + res.match_count.to_string()
+        + ",\"matches\":[";
+
+    let n: Int = list_len(res.matches);
+    let mut i: Int = 0;
+    while i < n {
+        if i > 0 { out = out + ","; }
+        out = out + match_line_to_json(list_get(res.matches, i));
+        i = i + 1;
+    }
+    out = out + "]}";
+    return out;
+}
+
+pub fn multi_results_to_json(results: List[FileSearchResult], query: String) -> String {
+    let mut total_matches: Int = 0;
+    let n_files: Int = list_len(results);
+    let mut i: Int = 0;
+    while i < n_files {
+        let r: FileSearchResult = list_get(results, i);
+        total_matches = total_matches + r.match_count;
+        i = i + 1;
+    }
+
+    let mut out: String = "{\"query\":\"" + json_str_escape_basic(query) + "\""
+        + ",\"total_matches\":" + total_matches.to_string()
+        + ",\"files_searched\":" + n_files.to_string()
+        + ",\"results\":[";
+
+    i = 0;
+    while i < n_files {
+        if i > 0 { out = out + ","; }
+        out = out + file_result_to_json(list_get(results, i));
+        i = i + 1;
+    }
+    out = out + "]}";
+    return out;
+}
+
+pub fn format_to_json(fmt: ArchiveFormat, path: String) -> String {
+    return "{\"file\":\"" + json_str_escape_basic(path) + "\""
+        + ",\"format\":\"" + json_str_escape_basic(fmt.name) + "\""
+        + ",\"extension\":\"" + json_str_escape_basic(fmt.extension) + "\""
+        + ",\"description\":\"" + json_str_escape_basic(fmt.magic_desc) + "\"}";
+}

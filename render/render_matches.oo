@@ -1,0 +1,114 @@
+// # Terminal Match and Line Formatter
+//
+// Logline: Formats matching lines with filename prefixes, line numbers, and pattern highlighting.
+//
+// Setup: Pure terminal text formatter supporting standard POSIX grep visual conventions.
+//
+// Beats:
+//   1. Construct ANSI escape sequences for path, line number, and pattern highlights.
+//   2. Highlight occurrences of search pattern within matching content lines.
+//   3. Render file results according to count-only, files-only, or full line modes.
+//   4. Aggregate multi-file search output into uniform terminal output.
+
+import "core/archive_types.oo";
+import "core/pattern_matcher.oo";
+
+fn ansi_esc() -> String {
+    return bytes_to_str(bytes_push(bytes_new(), 27));
+}
+
+fn color_magenta(s: String, use_color: Bool) -> String {
+    if !use_color { return s; }
+    return ansi_esc() + "[35m" + s + ansi_esc() + "[0m";
+}
+
+fn color_green(s: String, use_color: Bool) -> String {
+    if !use_color { return s; }
+    return ansi_esc() + "[32m" + s + ansi_esc() + "[0m";
+}
+
+fn color_red_bold(s: String, use_color: Bool) -> String {
+    if !use_color { return s; }
+    return ansi_esc() + "[1;31m" + s + ansi_esc() + "[0m";
+}
+
+pub fn highlight_match(line: String, pattern: String, use_color: Bool) -> String {
+    if !use_color || chars_len(pattern) == 0 {
+        return line;
+    }
+
+    let p_len: Int = chars_len(pattern);
+    let l_len: Int = chars_len(line);
+    let l_lower: String = to_lower_str(line);
+    let p_lower: String = to_lower_str(pattern);
+
+    let mut out: String = "";
+    let mut i: Int = 0;
+
+    while i < l_len {
+        if i + p_len <= l_len && str_slice(l_lower, i, i + p_len) == p_lower {
+            let matched_text: String = str_slice(line, i, i + p_len);
+            out = out + color_red_bold(matched_text, true);
+            i = i + p_len;
+        } else {
+            out = out + char_at(line, i);
+            i = i + 1;
+        }
+    }
+
+    return out;
+}
+
+pub fn render_file_result(res: FileSearchResult, opts: SearchOptions, multiple_files: Bool) -> String {
+    let show_filename: Bool = opts.with_filename || multiple_files;
+
+    if opts.files_only {
+        if res.match_count > 0 {
+            return res.file_path + "\n";
+        }
+        return "";
+    }
+
+    if opts.count_only {
+        if show_filename {
+            return color_magenta(res.file_path, opts.use_color) + ":" + res.match_count.to_string() + "\n";
+        }
+        return res.match_count.to_string() + "\n";
+    }
+
+    let mut out: String = "";
+    let n: Int = list_len(res.matches);
+    let mut i: Int = 0;
+
+    while i < n {
+        let m: MatchLine = list_get(res.matches, i);
+        let mut prefix: String = "";
+        if show_filename {
+            prefix = prefix + color_magenta(m.file_path, opts.use_color) + ":";
+        }
+        if opts.line_number {
+            prefix = prefix + color_green(m.line_num.to_string(), opts.use_color) + ":";
+        }
+
+        let highlighted: String = highlight_match(m.content, opts.pattern, opts.use_color);
+        out = out + prefix + highlighted + "\n";
+        i = i + 1;
+    }
+
+    return out;
+}
+
+pub fn render_multi_results(results: List[FileSearchResult], opts: SearchOptions) -> String {
+    let mut out: String = "";
+    let total_files: Int = list_len(results);
+    let multiple_files: Bool = total_files > 1;
+
+    let mut i: Int = 0;
+    while i < total_files {
+        let res: FileSearchResult = list_get(results, i);
+        out = out + render_file_result(res, opts, multiple_files);
+        i = i + 1;
+    }
+
+    return out;
+}

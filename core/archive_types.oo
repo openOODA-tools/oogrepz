@@ -1,0 +1,88 @@
+// # Archive and Search Data Types
+//
+// Logline: Data structures representing compression formats, line match records, and search metrics.
+//
+// Setup: Pure data definitions for capability-bounded compressed stream scanning.
+//
+// Beats:
+//   1. Declare ArchiveFormat structure capturing compression format metadata.
+//   2. Declare MatchLine record capturing file path, line number, content, and format.
+//   3. Declare SearchOptions parameter structure for pattern filters and display flags.
+//   4. Declare FileSearchResult aggregating stream matches and occurrence counts.
+
+pub type ArchiveFormat = struct {
+    name: String,
+    extension: String,
+    magic_desc: String
+};
+
+pub type MatchLine = struct {
+    file_path: String,
+    line_num: Int,
+    content: String,
+    format_name: String
+};
+
+pub type SearchOptions = struct {
+    pattern: String,
+    ignore_case: Bool,
+    invert_match: Bool,
+    line_number: Bool,
+    count_only: Bool,
+    files_only: Bool,
+    with_filename: Bool,
+    use_color: Bool
+};
+
+pub type FileSearchResult = struct {
+    file_path: String,
+    format_name: String,
+    total_lines: Int,
+    match_count: Int,
+    matches: List[MatchLine]
+};
+
+pub fn make_archive_format(n: String, ext: String, desc: String) -> ArchiveFormat {
+    return ArchiveFormat {
+        name: n,
+        extension: ext,
+        magic_desc: desc
+    };
+}
+
+pub fn make_match_line(path: String, lnum: Int, line: String, fmt: String) -> MatchLine {
+    return MatchLine {
+        file_path: path,
+        line_num: lnum,
+        content: line,
+        format_name: fmt
+    };
+}
+
+pub fn default_search_options(pat: String) -> SearchOptions {
+    return SearchOptions {
+        pattern: pat,
+        ignore_case: false,
+        invert_match: false,
+        line_number: false,
+        count_only: false,
+        files_only: false,
+        with_filename: false,
+        use_color: true
+    };
+}
+
+pub fn make_file_search_result(
+    path: String,
+    fmt: String,
+    total: Int,
+    matches: List[MatchLine]
+) -> FileSearchResult {
+    return FileSearchResult {
+        file_path: path,
+        format_name: fmt,
+        total_lines: total,
+        match_count: list_len(matches),
+        matches: matches
+    };
+}

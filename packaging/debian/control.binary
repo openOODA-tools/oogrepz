@@ -1,0 +1,10 @@
+Package: oogrepz
+Version: 0.2.0-1
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: openOODA-tools <ops@openooda.org>
+Description: COMPRESSED STREAM SEARCH
+ Zero-copy streaming search across gzip, bzip2, xz, and zstd compressed archives.
+ Capability-bounded openOODA utility with zero ambient authority,
+ regular pattern matching, and native Model Context Protocol (MCP) surface.

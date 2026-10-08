@@ -1,0 +1,97 @@
+// # Archive Format Magic Detector
+//
+// Logline: Identifies compression formats via binary magic signatures and path extensions.
+//
+// Setup: Pure header analyzer identifying gzip, bzip2, xz, zstd, and plain text formats.
+//
+// Beats:
+//   1. Check initial binary magic bytes for recognized compression headers.
+//   2. Inspect filename extensions for standardized archive suffixes.
+//   3. Correlate binary signatures with extension heuristics.
+//   4. Return standardized ArchiveFormat descriptor with format metadata.
+
+import "archive_types.oo";
+
+pub fn format_gzip() -> ArchiveFormat {
+    return make_archive_format("gzip", ".gz", "Gzip compressed (1f 8b)");
+}
+
+pub fn format_bzip2() -> ArchiveFormat {
+    return make_archive_format("bzip2", ".bz2", "Bzip2 compressed (42 5a 68 / BZh)");
+}
+
+pub fn format_xz() -> ArchiveFormat {
+    return make_archive_format("xz", ".xz", "XZ compressed (fd 37 7a 58 5a 00)");
+}
+
+pub fn format_zstd() -> ArchiveFormat {
+    return make_archive_format("zstd", ".zst", "Zstandard compressed (28 b5 2f fd)");
+}
+
+pub fn format_plain() -> ArchiveFormat {
+    return make_archive_format("plain", "", "Uncompressed stream");
+}
+
+pub fn detect_format_from_bytes(header: String) -> ArchiveFormat {
+    let n: Int = chars_len(header);
+    if n >= 2 {
+        let b0: Int = byte_at(header, 0);
+        let b1: Int = byte_at(header, 1);
+        if b0 == 31 && b1 == 139 { // 0x1f 0x8b
+            return format_gzip();
+        }
+    }
+    if n >= 3 {
+        let b0: Int = byte_at(header, 0);
+        let b1: Int = byte_at(header, 1);
+        let b2: Int = byte_at(header, 2);
+        if b0 == 66 && b1 == 90 && b2 == 104 { // 'B' 'Z' 'h'
+            return format_bzip2();
+        }
+    }
+    if n >= 4 {
+        let b0: Int = byte_at(header, 0);
+        let b1: Int = byte_at(header, 1);
+        let b2: Int = byte_at(header, 2);
+        let b3: Int = byte_at(header, 3);
+        if b0 == 40 && b1 == 181 && b2 == 47 && b3 == 253 { // 0x28 0xb5 0x2f 0xfd
+            return format_zstd();
+        }
+    }
+    if n >= 6 {
+        let b0: Int = byte_at(header, 0);
+        let b1: Int = byte_at(header, 1);
+        let b2: Int = byte_at(header, 2);
+        let b3: Int = byte_at(header, 3);
+        let b4: Int = byte_at(header, 4);
+        let b5: Int = byte_at(header, 5);
+        if b0 == 253 && b1 == 55 && b2 == 122 && b3 == 88 && b4 == 90 && b5 == 0 {
+            return format_xz();
+        }
+    }
+    return format_plain();
+}
+
+pub fn detect_format_from_path(path: String) -> ArchiveFormat {
+    if str_ends_with(path, ".gz") || str_ends_with(path, ".tgz") {
+        return format_gzip();
+    }
+    if str_ends_with(path, ".bz2") || str_ends_with(path, ".tbz2") {
+        return format_bzip2();
+    }
+    if str_ends_with(path, ".xz") || str_ends_with(path, ".txz") {
+        return format_xz();
+    }
+    if str_ends_with(path, ".zst") || str_ends_with(path, ".tzst") {
+        return format_zstd();
+    }
+    return format_plain();
+}
+
+pub fn detect_archive_format(path: String, header_sample: String) -> ArchiveFormat {
+    let from_magic: ArchiveFormat = detect_format_from_bytes(header_sample);
+    if from_magic.name != "plain" {
+        return from_magic;
+    }
+    return detect_format_from_path(path);
+}

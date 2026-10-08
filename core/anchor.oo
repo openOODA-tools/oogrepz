@@ -1,0 +1,43 @@
+// # Core Subsystem Anchor
+//
+// Logline: Consolidates archive data types, format detection, line splitting, and pattern matching.
+//
+// Setup: Pure anchor module verifying core search algorithms and format invariants.
+//
+// Beats:
+//   1. Re-export archive formats and match line models.
+//   2. Re-export magic signature detector and stream partitioners.
+//   3. Re-export case-insensitive pattern matching algorithms.
+//   4. Validate core search correctness through self-test routine.
+
+import "archive_types.oo";
+import "format_detector.oo";
+import "stream_reader.oo";
+import "pattern_matcher.oo";
+
+pub fn verify_core_subsystem() -> Bool {
+    let fmt: ArchiveFormat = detect_format_from_path("archive.tar.gz");
+    if fmt.name != "gzip" {
+        return false;
+    }
+
+    let raw: String = "alpha\nbeta\ngamma\n";
+    let lines: List[String] = split_into_lines(raw);
+    if list_len(lines) != 3 {
+        return false;
+    }
+
+    let mut opts: SearchOptions = default_search_options("BET");
+    opts.ignore_case = true;
+    let res: FileSearchResult = search_stream_lines("test.gz", "gzip", lines, opts);
+    if res.match_count != 1 {
+        return false;
+    }
+
+    let first_match: MatchLine = list_get(res.matches, 0);
+    if first_match.line_num != 2 || first_match.content != "beta" {
+        return false;
+    }
+
+    return true;
+}

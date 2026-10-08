@@ -1,0 +1,64 @@
+// # Compressed Search Showcase and Demo
+//
+// Logline: Simulates zero-copy stream search across virtual gzip, bzip2, xz, and zstd archives.
+//
+// Setup: Visual demonstration verifying multi-format streaming and pattern highlighting.
+//
+// Beats:
+//   1. Build sample virtual streams representing diverse archive formats.
+//   2. Execute capability-bounded pattern matching across all virtual archives.
+//   3. Render formatted terminal results with line numbers and matched highlights.
+//   4. Summarize archive formats inspected and overall hit counts.
+
+import "core/archive_types.oo";
+import "core/pattern_matcher.oo";
+import "render_matches.oo";
+
+pub fn render_grepz_demo(use_color: Bool) -> String {
+    let mut out: String = "";
+    out = out + "=================================================================\n";
+    out = out + " oogrepz 0.2.0 - Sovereign Compressed Stream Search Showcase\n";
+    out = out + "=================================================================\n\n";
+
+    let mut opts: SearchOptions = default_search_options("error");
+    opts.line_number = true;
+    opts.use_color = use_color;
+    opts.with_filename = true;
+
+    // Archive 1: kernel.log.gz (gzip)
+    let mut lines_gz: List[String] = list_new();
+    lines_gz = list_push(lines_gz, "[0.0001] Linux kernel boot initialised");
+    lines_gz = list_push(lines_gz, "[0.1245] ACPI: thermal table loaded");
+    lines_gz = list_push(lines_gz, "[1.4022] [error] failed to allocate legacy DMA buffer");
+    lines_gz = list_push(lines_gz, "[2.0019] openOODA sovereign userland initialized");
+
+    let res_gz: FileSearchResult = search_stream_lines("/var/log/kernel.log.gz", "gzip", lines_gz, opts);
+
+    // Archive 2: http.log.bz2 (bzip2)
+    let mut lines_bz: List[String] = list_new();
+    lines_bz = list_push(lines_bz, "127.0.0.1 - GET /status 200 OK");
+    lines_bz = list_push(lines_bz, "10.0.0.42 - POST /rpc/exec 500 error internal fault");
+    lines_bz = list_push(lines_bz, "192.168.1.1 - GET /catalog 200 OK");
+
+    let res_bz: FileSearchResult = search_stream_lines("/var/log/http.log.bz2", "bzip2", lines_bz, opts);
+
+    // Archive 3: security.log.xz (xz)
+    let mut lines_xz: List[String] = list_new();
+    lines_xz = list_push(lines_xz, "audit: token &FsReadCap granted to oosh");
+    lines_xz = list_push(lines_xz, "audit: ambient syscall interception active");
+    lines_xz = list_push(lines_xz, "audit: zero ambient error boundary maintained");
+
+    let res_xz: FileSearchResult = search_stream_lines("/var/log/security.log.xz", "xz", lines_xz, opts);
+
+    let mut all_results: List[FileSearchResult] = list_new();
+    all_results = list_push(all_results, res_gz);
+    all_results = list_push(all_results, res_bz);
+    all_results = list_push(all_results, res_xz);
+
+    out = out + "Query: \"" + opts.pattern + "\" across 3 virtual compressed streams\n\n";
+    out = out + render_multi_results(all_results, opts) + "\n";
+
+    let total_matches: Int = res_gz.match_count + res_bz.match_count + res_xz.match_count;
+    out = out + "Summary: " + total_matches.to_string() + " matches found across 3 archives (gzip, bzip2, xz)\n";
+    return out;
+}

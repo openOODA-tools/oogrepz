@@ -1,7 +1,7 @@
 # Maintainer: openOODA-tools <ops@openooda.org>
 pkgname=oogrepz-bin
 _pkgname=oogrepz
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Zero-copy streaming search across gzip, xz, and zstd compressed archives."
 arch=('x86_64')
